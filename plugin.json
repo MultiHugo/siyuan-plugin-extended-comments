@@ -1,0 +1,47 @@
+{
+ "name": "siyuan-plugin-extended-comments",
+ "author": "MultiHugo",
+ "url": "https://github.com/MultiHugo/siyuan-plugin-extended-comments",
+ "version": "0.7.0",
+ "minAppVersion": "3.8.2",
+ "kernels": [
+  "all"
+ ],
+ "backends": [
+  "all"
+ ],
+ "frontends": [
+  "desktop",
+  "browser-desktop",
+  "desktop-window"
+ ],
+ "disabledInPublish": false,
+ "displayName": {
+  "default": "Extended Comments",
+  "zh-CN": "拓展评论",
+  "zh_CN": "拓展评论",
+  "en_US": "Extended Comments"
+ },
+ "description": {
+  "default": "Comment on any text: threads live in the right dock, ordered by where the quoted text appears. Replies (and replies to replies), editing and deleting, per-thread resolve-and-hide, click-to-jump with a pulse on the underlined sentence.",
+  "zh-CN": "选中文字即可评论：评论排在右侧面板，按引用文字在文档中的位置排列；支持回复、对回复再回复（显示「回复 @某人」）、编辑与删除、整条评论「解决并隐藏」，点评论即可跳转到对应句子并在下划线处闪烁提示。",
+  "zh_CN": "选中文字即可评论：评论排在右侧面板，按引用文字在文档中的位置排列；支持回复、对回复再回复（显示「回复 @某人」）、编辑与删除、整条评论「解决并隐藏」，点评论即可跳转到对应句子并在下划线处闪烁提示。",
+  "en_US": "Comment on any text: threads live in the right dock, ordered by where the quoted text appears. Replies (and replies to replies), editing and deleting, per-thread resolve-and-hide, click-to-jump with a pulse on the underlined sentence."
+ },
+ "readme": {
+  "default": "README.md",
+  "zh-CN": "README.zh-CN.md",
+  "zh_CN": "README.zh_CN.md",
+  "en_US": "README.md"
+ },
+ "icon": "icon-0.7.0.png",
+ "preview": "preview-0.7.0.png",
+ "keywords": [
+  "comment",
+  "review",
+  "评论",
+  "协作",
+  "团队",
+  "审阅"
+ ]
+}
