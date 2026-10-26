@@ -2,7 +2,7 @@
 
 Document comments for SiYuan, the way Lark / Feishu and Google Docs do it: **select text → Comment → discuss in the right panel**. The commented sentence keeps a yellow underline, and comments live inside the document, so they sync and share with it.
 
-![preview](preview-0.7.0.png)
+![preview](preview-0.7.1.png)
 
 ## What it does
 
@@ -15,7 +15,7 @@ Document comments for SiYuan, the way Lark / Feishu and Google Docs do it: **sel
 - **Avatars and relative time**: coloured initial avatars; "just now / 12 min ago / Today 14:32 / Yesterday 09:05", with the exact time on hover
 - **Clickable quotes**: the quoted line at the top of a card jumps to its text
 
-![detail](preview-detail-0.7.0.png)
+![detail](preview-detail-0.7.1.png)
 
 ## Install and use
 
@@ -35,7 +35,7 @@ Comments are one JSON value in the document block attribute `custom-comments`:
 
     npm install
     npm run build                  # emits dist/ and package.zip
-    python scripts/make-assets.py  # regenerate icon-0.7.0.png / preview*.png
+    python scripts/make-assets.py  # regenerate icon-0.7.1.png / preview*.png
 
 All logic is in `src/index.ts` (store, persistence, panel rendering, action dispatch), styles in `src/index.scss`, strings in `src/i18n/*.json`.
 

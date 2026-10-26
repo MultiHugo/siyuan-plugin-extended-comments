@@ -2,7 +2,7 @@
 
 给思源笔记加上「像飞书 / Google Docs 那样」的文档内评论：**选中文字 → 评论 → 在右侧面板讨论**，被评论的原文带黄色下划线，评论跟着文档一起保存、一起分享。
 
-![界面预览](preview-0.7.0.png)
+![界面预览](preview-0.7.1.png)
 
 ## 它能做什么
 
@@ -15,7 +15,7 @@
 - **头像与相对时间**：首字母彩色圆形头像；时间显示为「刚刚 / 12 分钟前 / 今天 14:32 / 昨天 09:05」，鼠标悬停看完整时间
 - **引用可点**：卡片顶部引用的那行文字可以点击，直接跳到正文
 
-![交互细节](preview-detail-0.7.0.png)
+![交互细节](preview-detail-0.7.1.png)
 
 ## 安装与使用
 
@@ -35,7 +35,7 @@
 
     npm install
     npm run build                  # 产出 dist/，同时生成 package.zip
-    python scripts/make-assets.py  # 重新生成 icon-0.7.0.png / preview*.png
+    python scripts/make-assets.py  # 重新生成 icon-0.7.1.png / preview*.png
 
 `src/index.ts` 是全部逻辑（数据层、持久化、面板渲染、action 分发），`src/index.scss` 是样式，`src/i18n/*.json` 是文案。
 

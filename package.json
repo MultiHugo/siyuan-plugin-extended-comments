@@ -1,24 +1,17 @@
 {
   "name": "siyuan-plugin-extended-comments",
-  "version": "0.7.0",
-  "description": "Block-level team comments for SiYuan",
-  "main": ".src/index.js",
+  "version": "0.7.1",
+  "description": "Comment on selected text in SiYuan: threads in the right dock, replies, resolve-and-hide, click-to-jump.",
   "scripts": {
     "format": "dprint fmt",
     "format:check": "dprint check",
     "lint": "eslint . --fix --cache",
-    "test": "node --test tests/*.test.mjs",
-    "dev": "run-p dev:kernel dev:app",
-    "dev:app": "webpack --config webpack.config.js --mode development",
-    "dev:kernel": "webpack --config webpack.kernel.config.js --mode development",
-    "build": "run-s build:kernel build:app",
-    "build:app": "webpack --config webpack.config.js --mode production",
-    "build:kernel": "webpack --config webpack.kernel.config.js --mode production"
+    "dev": "webpack --config webpack.config.js --mode development",
+    "build": "webpack --config webpack.config.js --mode production"
   },
   "keywords": [],
-  "author": "zzy",
+  "author": "MultiHugo",
   "license": "MIT",
-  "packageManager": "pnpm@11.4.0",
   "engines": {
     "node": ">=24.0.0"
   },

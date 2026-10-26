@@ -2,7 +2,7 @@
  "name": "siyuan-plugin-extended-comments",
  "author": "MultiHugo",
  "url": "https://github.com/MultiHugo/siyuan-plugin-extended-comments",
- "version": "0.7.0",
+ "version": "0.7.1",
  "minAppVersion": "3.8.2",
  "kernels": [
   "all"
@@ -34,14 +34,14 @@
   "zh_CN": "README.zh_CN.md",
   "en_US": "README.md"
  },
- "icon": "icon-0.7.0.png",
- "preview": "preview-0.7.0.png",
+ "icon": "icon-0.7.1.png",
+ "preview": "preview-0.7.1.png",
  "keywords": [
   "comment",
+  "comments",
   "review",
   "评论",
-  "协作",
-  "团队",
-  "审阅"
+  "审阅",
+  "协作"
  ]
 }

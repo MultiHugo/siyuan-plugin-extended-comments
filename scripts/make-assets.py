@@ -3,7 +3,9 @@
 import os
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
-FONT = "C:/Windows/Fonts/msyh.ttc"
+FONT_DIR = os.environ.get("TC_FONT_DIR", "C:/Windows/Fonts")
+FONT = os.path.join(FONT_DIR, "msyh.ttc")
+FONT_B = os.path.join(FONT_DIR, "msyhbd.ttc")
 FONT_B = "C:/Windows/Fonts/msyhbd.ttc"
 OUT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -332,8 +334,8 @@ USE_REAL_SCREENSHOTS = False
 
 SHOTS = {
     # real screenshots, dropped in by the author; used when present
-    "preview": r"D:\AAAAAAlearn\AILAB\siyuan\preview-raw.png",
-    "detail": r"D:\AAAAAAlearn\AILAB\siyuan\detail-raw.png",
+    "preview": os.path.join(os.environ.get("TC_SHOTS_DIR", "screenshots"), "preview-raw.png"),
+    "detail": os.path.join(os.environ.get("TC_SHOTS_DIR", "screenshots"), "detail-raw.png"),
 }
 
 
