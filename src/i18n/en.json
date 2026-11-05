@@ -42,5 +42,8 @@
   "confirmDeleteComment": "Delete this comment and all of its replies? This cannot be undone.",
   "confirmDeleteReply": "Delete this reply and its answers? This cannot be undone.",
   "jumpToText": "Jump to the quoted text",
-  "locate": "Locate"
+  "locate": "Locate",
+  "accountBound": "Author follows the signed-in SciForge account",
+  "sciforgeLoginRequired": "Sign in to SciForge to comment",
+  "accountChanged": "SciForge account changed. Reopen the comment before continuing."
 }
