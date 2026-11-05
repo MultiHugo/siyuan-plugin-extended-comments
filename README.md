@@ -42,3 +42,11 @@ All logic is in `src/index.ts` (store, persistence, panel rendering, action disp
 ## License
 
 MIT
+
+## SciForge account attribution
+
+When opened inside an updated SciForge client, the plugin reads the current cloud user's ID and display name through a read-only, view-scoped bridge. The author follows the signed-in account; the manual name button is hidden. Signing out disables comment mutations, and switching accounts clears pending editors. New comments, replies and resolution records carry the stable user ID as well as the display name. Namespaced IDs distinguish users with identical names and retain ownership after a rename.
+
+Existing name-only comments remain readable and are not automatically assigned to a matching account. In an ordinary browser, manual signatures remain available and cannot claim ownership of account-linked comments.
+
+This is client-side attribution and UI ownership, not server-enforced access control. Anyone with direct write access to the shared SiYuan workspace can still modify its document attributes. The bridge contains no API keys, login tokens or email addresses.

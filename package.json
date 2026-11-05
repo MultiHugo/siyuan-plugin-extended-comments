@@ -1,13 +1,14 @@
 {
   "name": "siyuan-plugin-extended-comments",
-  "version": "0.7.1",
+  "version": "0.8.0",
   "description": "Comment on selected text in SiYuan: threads in the right dock, replies, resolve-and-hide, click-to-jump.",
   "scripts": {
     "format": "dprint fmt",
     "format:check": "dprint check",
     "lint": "eslint . --fix --cache",
     "dev": "webpack --config webpack.config.js --mode development",
-    "build": "webpack --config webpack.config.js --mode production"
+    "build": "webpack --config webpack.config.js --mode production",
+    "test": "node --test tests/*.test.cjs"
   },
   "keywords": [],
   "author": "MultiHugo",

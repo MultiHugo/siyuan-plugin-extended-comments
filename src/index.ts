@@ -9,9 +9,17 @@ import {
 } from "siyuan";
 import type { IProtyle } from "siyuan";
 import "./index.scss";
+import {
+    manualIdentity, readCommentIdentity, ownsComment, sameCommentActor,
+    type CommentActor, type CommentIdentity, type SciForgeCommentBridge,
+} from "./author-identity";
+
+const commentBridge = (): SciForgeCommentBridge | undefined =>
+    (window as unknown as {sciforgeCommentIdentity?: SciForgeCommentBridge}).sciforgeCommentIdentity;
 
 type TeamComment = {
     author: string;
+    authorId?: string;
     text: string;
     quote: string;
     createdAt: number;
@@ -23,6 +31,7 @@ type TeamReply = {
     // When set, this reply answers another reply instead of the comment itself.
     replyTo?: string;
     author: string;
+    authorId?: string;
     text: string;
     createdAt: number;
     updatedAt?: number;
@@ -30,6 +39,7 @@ type TeamReply = {
 
 type Resolution = {
     by: string;
+    byId?: string;
     at: number;
 };
 
@@ -174,7 +184,7 @@ const emptyStore = (): Store => ({v: STORE_VERSION, comments: {}});
 async function migrateLegacy(rootId: string): Promise<Store> {
     const store = emptyStore();
     const stmt = `SELECT block_id, name, value FROM attributes WHERE root_id = '${rootId}' AND (name LIKE 'custom-cmt-%' OR name LIKE 'custom-cmtr-%' OR name LIKE 'custom-cmtres-%')`;
-    let rows: AttrRow[] = [];
+    let rows: AttrRow[];
     try {
         rows = await api<AttrRow[]>("/api/query/sql", {stmt});
     } catch {
@@ -241,9 +251,9 @@ async function readStore(rootId: string): Promise<Store> {
 
 // Read-modify-write of the document store: a write is visible to the very next
 // read, so the panel never has to guess what the server has.
-async function mutateStore(rootId: string, change: (store: Store) => void): Promise<void> {
+async function mutateStore(rootId: string, change: (store: Store) => void | Promise<void>): Promise<void> {
     const store = await readStore(rootId);
-    change(store);
+    await change(store);
     await writeAttrs(rootId, {[STORE_KEY]: JSON.stringify(store)});
 }
 
@@ -258,6 +268,7 @@ const toThreads = (store: Store): StoredComment[] => {
                 blockId: comment.blockId,
                 comment: {
                     author: comment.author,
+                    authorId: comment.authorId,
                     text: comment.text,
                     quote: comment.quote,
                     createdAt: comment.createdAt,
@@ -282,7 +293,7 @@ const esc = (value: string): string => value.replace(/[&<>"']/g, (ch) => ({
     "'": "&#39;",
 }[ch] ?? ch));
 
-const readAuthor = (): string =>
+const readManualAuthor = (): string =>
     localStorage.getItem(AUTHOR_KEY) ?? localStorage.getItem(LEGACY_AUTHOR_KEY) ?? "";
 
 // The selection toolbar and the context menu both hand us a DOM Range, never a
@@ -393,8 +404,52 @@ export default class TeamCommentPlugin extends Plugin {
     private orderMap = new Map<string, number>();
     private orderRootId = "";
 
+    private identity: CommentIdentity = commentBridge()
+        ? {mode: "sciforge", state: "unavailable"} : manualIdentity(readManualAuthor());
+    private identityTimer?: number;
+    private identityRefresh: Promise<void> = Promise.resolve();
+
+    private readAuthor(): string {
+        return this.identity.mode === "manual" ? readManualAuthor() : this.identity.actor?.author ?? "";
+    }
+
+    private currentActor(): CommentActor | undefined {
+        return this.identity.mode === "manual" ? manualIdentity(readManualAuthor()).actor : this.identity.actor;
+    }
+
+    private refreshIdentity(): Promise<void> {
+        // Serialize refreshes; every submission performs its own fresh read after
+        // any timer read instead of allowing an older response to win a race.
+        const pending = this.identityRefresh.then(() => this.readIdentity());
+        this.identityRefresh = pending.catch((): void => undefined);
+        return pending;
+    }
+
+    private async readIdentity(): Promise<void> {
+        const next = await readCommentIdentity(commentBridge(), readManualAuthor());
+        if (currentPlugin() !== this) return;
+        const previous = this.identity;
+        const changed = previous.state !== next.state || previous.mode !== next.mode ||
+            !sameCommentActor(previous.actor, next.actor);
+        this.identity = next;
+        if (!changed) return;
+        // Drafts and editing controls belong to the account that opened them.
+        if (previous.actor?.authorId !== next.actor?.authorId || previous.mode !== next.mode) {
+            this.pending = null;
+            this.replying = null;
+            this.editing = null;
+            this.editingReply = null;
+            this.panelElement()?.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>("input, textarea")
+                .forEach((field) => { field.value = ""; });
+        }
+        this.authorEditing = false;
+        await this.renderDock(false);
+    }
+
     onload() {
         setCurrentPlugin(this);
+        void this.refreshIdentity();
+        if (commentBridge()) this.identityTimer = window.setInterval(() => { void this.refreshIdentity(); }, 1000);
         // Register our own symbol first: no icon theme ships a comment glyph, and
         // without a matching <symbol> the toolbar and dock buttons render blank.
         this.addIcons(`<symbol id="iconTeamComment" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
@@ -440,6 +495,7 @@ export default class TeamCommentPlugin extends Plugin {
     }
 
     onunload() {
+        if (this.identityTimer) window.clearInterval(this.identityTimer);
         if (currentPlugin() === this) {
             setCurrentPlugin(null);
         }
@@ -845,7 +901,7 @@ export default class TeamCommentPlugin extends Plugin {
         const listScroll = list?.scrollTop ?? 0;
         this.activeCard = undefined;
         this.lastScrollTop = -1;
-        element.innerHTML = this.panelHtml(readAuthor());
+        element.innerHTML = this.panelHtml(this.readAuthor());
         const nextList = element.querySelector<HTMLElement>(".tc-list");
         if (nextList) {
             // A new comment is written at the top of the list, so show the form.
@@ -920,16 +976,18 @@ export default class TeamCommentPlugin extends Plugin {
             ? visible.map((item, index) => this.itemHtml(item, author, index)).join("")
             : `<div class="tc-empty">${esc(i18n.noComments)}</div>`;
         const toggle = resolvedCount > 0
-            ? `<div class="tc-show-resolved"><button class="b3-button b3-button--small" data-action="toggle-resolved">` +
+            ? "<div class=\"tc-show-resolved\"><button class=\"b3-button b3-button--small\" data-action=\"toggle-resolved\">" +
                 esc(this.showResolved ? i18n.hideResolved : i18n.showResolved + " (" + resolvedCount + ")") +
-                `</button></div>`
+                "</button></div>"
             : "";
         return `<div class="tc-panel">
     <div class="tc-toolbar">
         <span class="tc-toolbar-title">${esc(i18n.dockTitle)}</span>
         <span class="fn__space"></span>
         <button class="b3-button b3-button--small" data-action="first" title="${esc(i18n.jumpFirst || "首条评论")}">${esc(i18n.jumpFirst || "首条评论")}</button>
-        <button class="b3-button b3-button--small" data-action="author">${esc(i18n.setAuthor)}</button>
+        ${this.identity.mode === "sciforge"
+            ? `<span class="tc-account" title="${esc(i18n.accountBound)}">${esc(author || i18n.sciforgeLoginRequired)}</span>`
+            : `<button class="b3-button b3-button--small" data-action="author">${esc(i18n.setAuthor)}</button>`}
         <button class="b3-button b3-button--small" data-action="refresh">${esc(i18n.refresh)}</button>
     </div>
     ${this.authorHtml(author)}
@@ -944,7 +1002,7 @@ export default class TeamCommentPlugin extends Plugin {
     }
 
     private authorHtml(author: string): string {
-        if (!this.authorEditing) {
+        if (this.identity.mode === "sciforge" || !this.authorEditing) {
             return "";
         }
         const i18n = t(this);
@@ -965,7 +1023,7 @@ export default class TeamCommentPlugin extends Plugin {
         }
         const i18n = t(this);
         const quote = pending.quote ? `<div class="tc-quote">${esc(pending.quote)}</div>` : "";
-        const authorField = author
+        const authorField = author || this.identity.mode === "sciforge"
             ? ""
             : `<input class="b3-text-field fn__block tc-author-inline" data-draft="inline-author" placeholder="${esc(i18n.authorPlaceholder)}">`;
         return `<div class="tc-compose">
@@ -981,7 +1039,7 @@ export default class TeamCommentPlugin extends Plugin {
 
     private itemHtml(item: StoredComment, author: string, index: number): string {
         const i18n = t(this);
-        const mine = item.comment.author === author;
+        const mine = ownsComment(item.comment, this.currentActor());
         const editing = this.editing?.key === item.key;
         const resolved = Boolean(item.resolution);
         const quote = item.comment.quote
@@ -1077,7 +1135,7 @@ export default class TeamCommentPlugin extends Plugin {
     // anyone can answer it.
     private replyHtml(reply: StoredReply, author: string, all: StoredReply[], open: boolean): string {
         const i18n = t(this);
-        const mine = reply.reply.author === author;
+        const mine = ownsComment(reply.reply, this.currentActor());
         const editing = this.editingReply === reply.key;
         const answered = reply.reply.replyTo ? all.find((entry) => entry.key === reply.reply.replyTo) : undefined;
         const target = answered
@@ -1169,6 +1227,7 @@ export default class TeamCommentPlugin extends Plugin {
                 await this.jumpToFirst();
                 return;
             case "author":
+                if (this.identity.mode === "sciforge") return;
                 this.authorEditing = true;
                 await this.renderDock(false);
                 this.focusSoon(".tc-author-input");
@@ -1306,6 +1365,7 @@ export default class TeamCommentPlugin extends Plugin {
     }
 
     private saveAuthor() {
+        if (this.identity.mode === "sciforge") return;
         const value = this.panelElement()?.querySelector<HTMLInputElement>(".tc-author-input")?.value.trim() ?? "";
         if (value) {
             localStorage.setItem(AUTHOR_KEY, value);
@@ -1313,14 +1373,17 @@ export default class TeamCommentPlugin extends Plugin {
         }
     }
 
-    // Every write needs an identity: the author is a plain signature, not a login.
-    private requireAuthor(): string | null {
-        const author = readAuthor();
-        if (author) {
-            return author;
+    private async requireAuthor(): Promise<CommentActor | null> {
+        const previous = this.currentActor();
+        await this.refreshIdentity();
+        const actor = this.currentActor();
+        if (previous && !sameCommentActor(previous, actor)) {
+            showMessage(t(this).accountChanged);
+            return null;
         }
-        showMessage(t(this).authorRequired);
-        this.authorEditing = true;
+        if (actor) return actor;
+        showMessage(this.identity.mode === "sciforge" ? t(this).sciforgeLoginRequired : t(this).authorRequired);
+        this.authorEditing = this.identity.mode === "manual";
         void this.renderDock(false);
         return null;
     }
@@ -1492,7 +1555,7 @@ export default class TeamCommentPlugin extends Plugin {
 
     // Every change is one read-modify-write of the document store, followed by a
     // reload: no optimistic guessing, no waiting for an index to catch up.
-    private async mutate(change: (store: Store) => void, hintBlockId?: string): Promise<boolean> {
+    private async mutate(change: (store: Store) => void, hintBlockId: string | undefined, actor: CommentActor): Promise<boolean> {
         let rootId = this.activeRootId();
         if (!rootId && hintBlockId) {
             rootId = await this.rootIdForBlock(hintBlockId);
@@ -1505,7 +1568,12 @@ export default class TeamCommentPlugin extends Plugin {
             return false;
         }
         try {
-            await mutateStore(rootId, change);
+            await mutateStore(rootId, async (store) => {
+                // Recheck after all document reads, immediately before the write.
+                await this.refreshIdentity();
+                if (!sameCommentActor(actor, this.currentActor())) throw new Error(t(this).accountChanged);
+                change(store);
+            });
         } catch (error) {
             showMessage(t(this).saveFailed + ": " + (error as Error).message);
             return false;
@@ -1521,19 +1589,12 @@ export default class TeamCommentPlugin extends Plugin {
         if (!element || !pending) {
             return;
         }
-        let author = readAuthor();
-        const inline = element.querySelector<HTMLInputElement>(".tc-author-inline");
-        if (inline) {
-            author = inline.value.trim();
-            if (author) {
-                localStorage.setItem(AUTHOR_KEY, author);
-            }
-        }
-        if (!author) {
-            showMessage(t(this).authorRequired);
-            this.focusSoon(".tc-author-inline");
-            return;
-        }
+        const inline = this.identity.mode === "manual"
+            ? element.querySelector<HTMLInputElement>(".tc-author-inline") : null;
+        if (inline?.value.trim()) localStorage.setItem(AUTHOR_KEY, inline.value.trim());
+        const actor = await this.requireAuthor();
+        if (!actor) return;
+        const author = actor.author;
         const text = element.querySelector<HTMLTextAreaElement>(".tc-text")?.value.trim() ?? "";
         if (!text) {
             showMessage(t(this).commentRequired);
@@ -1546,13 +1607,15 @@ export default class TeamCommentPlugin extends Plugin {
             store.comments[key] = {
                 blockId: pending.blockId,
                 author,
+                authorId: actor.authorId,
                 text,
                 quote: pending.quote,
                 createdAt: Date.now(),
                 replies: {},
             };
-        }, pending.blockId);
+        }, pending.blockId, actor);
         if (!done) {
+            if (!sameCommentActor(actor, this.currentActor())) return;
             this.pending = pending;
             await this.renderDock(false);
             return;
@@ -1561,7 +1624,8 @@ export default class TeamCommentPlugin extends Plugin {
     }
 
     private async saveReply(commentKey: string) {
-        const author = this.requireAuthor();
+        const actor = await this.requireAuthor();
+        const author = actor?.author;
         const element = this.panelElement();
         const thread = this.findComment(commentKey);
         if (!author || !element || !thread) {
@@ -1599,9 +1663,10 @@ export default class TeamCommentPlugin extends Plugin {
                 return;
             }
             comment.replies = comment.replies ?? {};
-            comment.replies[key] = {parent, replyTo, author, text, createdAt: Date.now()};
-        }, thread.blockId);
+            comment.replies[key] = {parent, replyTo, author, authorId: actor.authorId, text, createdAt: Date.now()};
+        }, thread.blockId, actor);
         if (!done) {
+            if (!sameCommentActor(actor, this.currentActor())) return;
             this.replying = previous;
             await this.renderDock(false);
             // The send failed: give the text back instead of dropping it.
@@ -1620,13 +1685,14 @@ export default class TeamCommentPlugin extends Plugin {
     }
 
     private async saveReplyEdit(key: string) {
-        const author = this.requireAuthor();
+        const actor = await this.requireAuthor();
+        const author = actor?.author;
         const element = this.panelElement();
         const reply = this.findReply(key);
         if (!author || !element || !reply) {
             return;
         }
-        if (reply.reply.author !== author) {
+        if (!ownsComment(reply.reply, actor)) {
             showMessage(t(this).editDenied);
             this.editingReply = null;
             await this.renderDock(false);
@@ -1644,11 +1710,13 @@ export default class TeamCommentPlugin extends Plugin {
         const done = await this.mutate((store) => {
             const stored = store.comments[reply.reply.parent]?.replies?.[key];
             if (stored) {
+                if (!ownsComment(stored, actor)) throw new Error(t(this).editDenied);
                 stored.text = text;
                 stored.updatedAt = Date.now();
             }
-        }, reply.blockId);
+        }, reply.blockId, actor);
         if (!done) {
+            if (!sameCommentActor(actor, this.currentActor())) return;
             // Keep the textarea (and its text) instead of dropping the edit.
             this.editingReply = previous;
             await this.renderDock(false);
@@ -1658,13 +1726,14 @@ export default class TeamCommentPlugin extends Plugin {
     }
 
     private async saveEdit(key: string) {
-        const author = this.requireAuthor();
+        const actor = await this.requireAuthor();
+        const author = actor?.author;
         const element = this.panelElement();
         const item = this.findComment(key);
         if (!author || !element || !item) {
             return;
         }
-        if (item.comment.author !== author) {
+        if (!ownsComment(item.comment, actor)) {
             showMessage(t(this).editDenied);
             this.editing = null;
             await this.renderDock(false);
@@ -1681,11 +1750,13 @@ export default class TeamCommentPlugin extends Plugin {
         const done = await this.mutate((store) => {
             const comment = store.comments[key];
             if (comment) {
+                if (!ownsComment(comment, actor)) throw new Error(t(this).editDenied);
                 comment.text = text;
                 comment.updatedAt = Date.now();
             }
-        }, item.blockId);
+        }, item.blockId, actor);
         if (!done) {
+            if (!sameCommentActor(actor, this.currentActor())) return;
             // Keep the textarea (and its text) instead of dropping the edit.
             this.editing = previous;
             await this.renderDock(false);
@@ -1695,7 +1766,8 @@ export default class TeamCommentPlugin extends Plugin {
     }
 
     private async setResolution(key: string, resolved: boolean) {
-        const author = this.requireAuthor();
+        const actor = await this.requireAuthor();
+        const author = actor?.author;
         if (!author || !this.findComment(key)) {
             return;
         }
@@ -1711,21 +1783,24 @@ export default class TeamCommentPlugin extends Plugin {
                 return;
             }
             if (resolved) {
-                comment.resolution = {by: author, at: Date.now()};
+                comment.resolution = {by: author, byId: actor.authorId, at: Date.now()};
             } else {
                 delete comment.resolution;
             }
-        }, this.findComment(key)?.blockId);
+        }, this.findComment(key)?.blockId, actor);
         if (done) {
             showMessage(resolved ? t(this).resolvedMsg : t(this).unresolvedMsg);
         }
     }
 
     private async deleteComment(key: string) {
+        const actor = await this.requireAuthor();
+        if (!actor) return;
         const item = this.findComment(key);
         if (!item) {
             return;
         }
+        if (!ownsComment(item.comment, actor)) { showMessage(t(this).editDenied); return; }
         if (item.replies.length && !window.confirm(t(this).confirmDeleteComment)) {
             return;
         }
@@ -1736,18 +1811,22 @@ export default class TeamCommentPlugin extends Plugin {
             this.replying = null;
         }
         const done = await this.mutate((store) => {
+            if (!store.comments[key] || !ownsComment(store.comments[key], actor)) throw new Error(t(this).editDenied);
             delete store.comments[key];
-        }, this.findComment(key)?.blockId);
+        }, this.findComment(key)?.blockId, actor);
         if (done) {
             showMessage(t(this).deleted);
         }
     }
 
     private async deleteReply(key: string) {
+        const actor = await this.requireAuthor();
+        if (!actor) return;
         const reply = this.findReply(key);
         if (!reply) {
             return;
         }
+        if (!ownsComment(reply.reply, actor)) { showMessage(t(this).editDenied); return; }
         // Replies can answer each other, so deleting one deletes its answers too.
         const thread = this.threads.find((entry) => entry.replies.some((child) => child.key === key));
         const doomed = thread ? this.replySubtree(thread.replies, key) : [key];
@@ -1767,10 +1846,11 @@ export default class TeamCommentPlugin extends Plugin {
             if (!comment?.replies) {
                 return;
             }
+            if (!ownsComment(comment.replies[key], actor)) throw new Error(t(this).editDenied);
             for (const child of doomed) {
                 delete comment.replies[child];
             }
-        }, reply.blockId);
+        }, reply.blockId, actor);
         if (done) {
             showMessage(t(this).deleted);
         }

@@ -42,5 +42,8 @@
   "confirmDeleteComment": "删除这条评论及其全部回复？此操作无法撤销。",
   "confirmDeleteReply": "删除这条回复及其下的答复？此操作无法撤销。",
   "jumpToText": "点击跳转到引用的文字",
-  "locate": "定位"
+  "locate": "定位",
+  "accountBound": "作者已绑定当前 SciForge 登录账号",
+  "sciforgeLoginRequired": "请先登录 SciForge 后发表评论",
+  "accountChanged": "SciForge 账号已切换，请重新打开评论后操作"
 }
