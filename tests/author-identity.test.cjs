@@ -41,17 +41,18 @@ test("same-name users, legacy signatures, and manual spoofing do not own linked 
   assert.equal(sameCommentActor(a,b),false);
 });
 
-function fixture(managed = true) {
-  let profile=signedIn("a"), stored={v:1,comments:{}},writes=0,readHook;
+function fixture(managed = true, backend = {stored:{v:1,comments:{}},writes:0}) {
+  let profile=signedIn("a"),readHook;
   const local=new Map([["extended-comments:author","Cached"]]);
   global.localStorage={getItem:k=>local.get(k)??null,setItem:(k,v)=>local.set(k,v)};
   global.window={confirm:()=>true};
   if(managed)window.sciforgeCommentIdentity={version:1,read:async()=>profile};
+  const clientWindow=window,clientStorage=global.localStorage;
   const messages=[];
   class Plugin {constructor(){this.i18n={...require("../src/i18n/en.json"),accountChanged:"changed",editDenied:"denied",sciforgeLoginRequired:"login",saveFailed:"failed",saved:"saved",deleted:"deleted"};}}
   const sdk={Plugin,showMessage:m=>messages.push(m),fetchSyncPost:async(url,input)=>{
-    if(url.endsWith("getBlockAttrs")) {if(readHook)readHook();return {code:0,data:{"custom-comments":JSON.stringify(stored)}};}
-    if(url.endsWith("setBlockAttrs")) {stored=JSON.parse(input.attrs["custom-comments"]);writes++;return {code:0,data:null};}
+    if(url.endsWith("getBlockAttrs")) {if(readHook)readHook();return {code:0,data:{"custom-comments":JSON.stringify(backend.stored)}};}
+    if(url.endsWith("setBlockAttrs")) {backend.stored=JSON.parse(input.attrs["custom-comments"]);backend.writes++;return {code:0,data:null};}
     throw new Error(url);
   }};
   const C=load("index.ts",{siyuan:sdk}).default,plugin=new C();window.__extendedCommentsPlugin=plugin;
@@ -60,11 +61,33 @@ function fixture(managed = true) {
   plugin.orderedThreads=()=>plugin.threads;
   plugin.panelElement=()=>panel;plugin.renderDock=async()=>{};plugin.focusSoon=()=>{};
   plugin.activeRootId=()=>"doc";plugin.replyField=()=>reply;
-  plugin.reloadThreads=async()=>{plugin.threads=Object.entries(stored.comments).map(([key,c])=>({
+  plugin.reloadThreads=async()=>{plugin.threads=Object.entries(backend.stored.comments).map(([key,c])=>({
     key,blockId:c.blockId,comment:c,replies:Object.entries(c.replies).map(([key,r])=>({key,blockId:c.blockId,reply:r}))}));};
   return {plugin,messages,text,setProfile:p=>{profile=p;},hook:fn=>{readHook=fn;},
-    get store(){return stored;},get writes(){return writes;}};
+    activate:()=>{global.window=clientWindow;global.localStorage=clientStorage;},
+    get store(){return backend.stored;},get writes(){return backend.writes;}};
 }
+
+test("two independent clients share one document with distinct account attribution", async () => {
+  const backend={stored:{v:1,comments:{}},writes:0};
+  const a=fixture(true,backend),b=fixture(true,backend);b.setProfile(signedIn("b"));
+  a.activate();await a.plugin.refreshIdentity();
+  a.plugin.pending={blockId:"shared-block",quote:"shared document"};await a.plugin.saveCompose();
+  const key=Object.keys(backend.stored.comments)[0];
+  b.activate();await b.plugin.refreshIdentity();await b.plugin.reloadThreads();
+  assert.equal(b.plugin.threads[0].comment.authorId,"sciforge:a");
+  await b.plugin.saveReply(key);
+  assert.equal(Object.values(backend.stored.comments[key].replies)[0].authorId,"sciforge:b");
+  const before=JSON.stringify(backend.stored);
+  await b.plugin.saveEdit(key);await b.plugin.deleteComment(key);
+  assert.equal(JSON.stringify(backend.stored),before);
+  a.activate();await a.plugin.reloadThreads();
+  assert.equal(a.plugin.threads[0].replies[0].reply.authorId,"sciforge:b");
+  assert.equal(a.plugin.threads[0].comment.author,"同名");
+  b.activate();b.setProfile({state:"signed-out"});await b.plugin.refreshIdentity();
+  const writes=backend.writes;await b.plugin.saveReply(key);
+  assert.equal(backend.writes,writes);
+});
 test("production compose/reply writes carry host IDs; UI removes manual author switching", async () => {
   const f=fixture();await f.plugin.refreshIdentity();
   f.plugin.pending={blockId:"block",quote:"quote"};await f.plugin.saveCompose();
