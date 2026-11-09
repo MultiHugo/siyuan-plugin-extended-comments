@@ -15,9 +15,11 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           cache: npm
       - run: npm ci
+      - run: npm test
+      - run: npx tsc --noEmit
       # `npm run build` emits dist/ and package.zip (the bazaar release asset)
       - run: npm run build
       - uses: softprops/action-gh-release@v2

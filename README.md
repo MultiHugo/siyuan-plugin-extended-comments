@@ -20,7 +20,7 @@ Document comments for SiYuan, the way Lark / Feishu and Google Docs do it: **sel
 ## Install and use
 
 1. Marketplace → Plugins → search "Extended Comments" and download it; for a local build use Settings → Marketplace → Downloaded → enable (hard-refresh with `Ctrl+Shift+R` after an update)
-2. Press "Name" in the panel once to set your display name (**stored in this browser only**, not an account)
+2. Inside SciForge, sign in to your cloud account: comment authors follow that account automatically. In a standalone browser, press "Name" to set a manual display name (**stored in this browser only**, not an account).
 3. Select text → Comment in the floating toolbar → write → save
 
 ## Where the data lives
